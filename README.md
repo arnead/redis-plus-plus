@@ -19,7 +19,7 @@
 
 ## Overview
 
-This is a C++ client for Redis. It's based on [hiredis](https://github.com/redis/hiredis), and written in C++ 11.
+This is a C++ client for Redis. It is a fork of https://github.com/sewenew/redis-plus-plus (which is based on [hiredis](https://github.com/redis/hiredis)), and written in C++ 14. With this fork sending commands to Redis (non-cluster) is a bit simplified.
 
 ### Features
 - Most commands for Redis 4.0.
@@ -61,7 +61,7 @@ make PREFIX=/non/default/path install
 *redis-plus-plus* is built with [CMAKE](https://cmake.org).
 
 ```
-git clone https://github.com/sewenew/redis-plus-plus.git
+git clone https://github.com/arnead/redis-plus-plus
 
 cd redis-plus-plus
 
@@ -113,30 +113,30 @@ If all tests have been passed, the test program will print the following message
 
 ### Use redis-plus-plus In Your Project
 
-Since *redis-plus-plus* depends on *hiredis*, you need to link both libraries to your Application. Also don't forget to specify the `-std=c++11` and thread-related option. Take GCC as an example.
+Since *redis-plus-plus* depends on *hiredis*, you need to link both libraries to your Application. Also don't forget to specify the `-std=c++14` and thread-related option. Take GCC as an example.
 
 #### Use Shared Libraries
 
 ```
-g++ -std=c++11 -lhiredis -lredis++ -pthread -o app app.cpp
+g++ -std=c++14 -lhiredis -lredis++ -pthread -o app app.cpp
 ```
 
 If *hiredis* and *redis-plus-plus* are installed at non-default location, you should use `-I` and `-L` options to specify the header and library paths.
 
 ```
-g++ -std=c++11 -I/non-default/install/include/path -L/non-default/install/lib/path -lhiredis -lredis++ -pthread -o app app.cpp
+g++ -std=c++14 -I/non-default/install/include/path -L/non-default/install/lib/path -lhiredis -lredis++ -pthread -o app app.cpp
 ```
 
 #### Use Static Libraries
 
 ```
-g++ -std=c++11 -pthread -o app app.cpp /path/to/libhiredis.a /path/to/libredis++.a
+g++ -std=c++14 -pthread -o app app.cpp /path/to/libhiredis.a /path/to/libredis++.a
 ```
 
 If *hiredis* and *redis-plus-plus* are installed at non-default location, you should use `-I` option to specify the header path.
 
 ```
-g++ -std=c++11 -pthread -I/non-default/install/include/path -o app app.cpp /path/to/libhiredis.a /path/to/libredis++.a
+g++ -std=c++14 -pthread -I/non-default/install/include/path -o app app.cpp /path/to/libhiredis.a /path/to/libredis++.a
 ```
 
 ## Getting Started
@@ -397,8 +397,14 @@ using OptionalStringPair = Optional<std::pair<std::string, std::string>>;
 There're too many Redis commands, we haven't implemented all of them. However, you can use `Redis::command` method to send these commands to Redis.
 
 ```
-template <typename Cmd, typename ...Args>
-ReplyUPtr Redis::command(Cmd cmd, Args &&...args);
+    /**
+     * invoke the given command functor on a connection of this Redis client.
+     * @param cmd something that is a command functor (can be called with a Connection& as first parameter and the given args).
+     * @param args trailing arguments to cmd
+     * @return a ReplyUPtr
+     */
+    template <typename Cmd, typename ...Args>
+    auto Redis::command(Cmd cmd, Args &&...args)->std::enable_if_t<isCommandFunctor_v<Cmd, Args...>, ReplyUPtr>;
 ```
 
 In order to use this method, you need to pass in a `Cmd` object, which must be a callable object, e.g. function, functor, or lambda. The first argument of `Cmd` is of type `Connection`. `Redis::command` will fetch a connection from the connection pool, and pass the connection and `args` as arguments for `Cmd`. `Cmd` can call the overloaded `Connection::send` methods to send the command to Redis.
@@ -431,6 +437,22 @@ assert(reply::parse<long long>(*reply) == 1);
 
 reply = redis.command(lpush_nums, "list", std::vector<long long>{2, 3, 4, 5});
 assert(reply::parse<long long>(*reply) == 5);
+```
+##### simple string commands
+
+```
+    
+    /**
+     * simplified command execution. cmd is a redis command string with format specifiers, matching the trailing args.
+     */
+    template <typename ...Args>
+    ReplyUPtr Redis::command(const StringView & cmd, Args &&...args);
+```
+Example
+```
+Redis redis("tcp://127.0.0.1:6379");
+std::string clientName("Hugo");
+redis.command("CLIENT SETNAME %s",clientName.c_str());
 ```
 
 Please see [connection.h](https://github.com/sewenew/redis-plus-plus/blob/master/src/sw/redis%2B%2B/connection.h), [command_args.h](https://github.com/sewenew/redis-plus-plus/blob/master/src/sw/redis%2B%2B/command_args.h), and [command.h](https://github.com/sewenew/redis-plus-plus/blob/master/src/sw/redis%2B%2B/command.h) for details.
